@@ -1,4 +1,5 @@
 .simulation {
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   width: clamp(300px, 70%, 1000px);
@@ -9,6 +10,7 @@
 
 .simulation__question {
   text-align: start;
+  color: rgb(80, 80, 80);
 }
 
 .simulation__title {
@@ -22,6 +24,7 @@
   text-align: start;
 }
 
+/* Dead CSS, unused in JSX (flagged, not renamed/removed per plan). */
 .simulation__questions_list {
   list-style-type: circle;
   list-style-type: none;
@@ -33,6 +36,7 @@
   padding: 0;
 }
 
+/* Dead CSS, unused in JSX and empty (flagged, not renamed/removed per plan). */
 .simulation__answer {
 }
 .simulation__buttons {
@@ -45,7 +49,7 @@
   justify-content: space-between;
   align-items: flex-end;
 }
-.simulation__button_foward {
+.simulation__button--forward {
   border: none;
   background-color: #26215c;
   color: white;
@@ -60,7 +64,7 @@
   height: fit-content;
 }
 
-.simulation__button_foward:hover {
+.simulation__button--forward:hover {
   box-shadow:
     0 4px 8px rgba(0, 0, 0, 0.12),
     0 1px 3px rgba(0, 0, 0, 0.08);
@@ -69,13 +73,13 @@
   cursor: pointer;
 }
 
-.simulation__button_foward:disabled {
+.simulation__button--forward:disabled {
   background-color: #e2e2e2;
   color: #adadad;
   font-weight: 500;
 }
 
-.simulation__button_back {
+.simulation__button--back {
   border: none;
   background-color: #ffffff;
   color: rgb(77, 77, 77);
@@ -89,7 +93,7 @@
   padding: 15px 100px;
 }
 
-.simulation__button_back:hover {
+.simulation__button--back:hover {
   box-shadow:
     0 4px 8px rgba(0, 0, 0, 0.12),
     0 1px 3px rgba(0, 0, 0, 0.08);
@@ -127,17 +131,126 @@
   resize: none;
 }
 
-.simulation__progress_counter {
+.simulation__progress-counter {
   color: rgb(173, 171, 171);
   align-self: center;
   font-size: 15px;
 }
 
 .simulation__input-error {
-  flex-shrink: 0;
-  margin: 2px 0 0;
+  margin: 0;
   color: #dc2626;
   font-size: 10px;
   line-height: 16px;
   text-align: start;
+}
+
+.simulation__input-footer {
+  min-height: 28px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.simulation__skip-button {
+  flex-shrink: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: #757474;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.simulation__skip-button:hover {
+  color: #26215c;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.simulation__skip-button:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid #534ab7;
+  outline-offset: 2px;
+}
+
+.simulation__skip-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (max-width: 900px) {
+  .simulation {
+    width: min(90%, 760px);
+  }
+
+  .simulation__button--back,
+  .simulation__button--forward {
+    min-width: 200px;
+    padding: 14px 48px;
+  }
+}
+
+@media (max-width: 600px) {
+  .simulation {
+    width: 100%;
+    padding: 0 16px 24px;
+    gap: 8px;
+  }
+
+  .simulation__title {
+    margin: 20px 0 12px;
+    font-size: clamp(24px, 8vw, 30px);
+    line-height: 1.2;
+  }
+
+  .simulation__question {
+    font-size: 20px;
+  }
+
+  .simulation__text {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .simulation__input-txt {
+    min-height: 220px;
+    max-height: none;
+  }
+
+  .simulation__buttons {
+    margin-top: 24px;
+    margin-bottom: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 24px;
+  }
+
+  .simulation__button--back,
+  .simulation__button--forward {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 12px 8px;
+  }
+
+  .simulation__progress-counter {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    flex-shrink: 0;
+    justify-self: center;
+  }
+}
+
+@media (max-width: 360px) {
+  .simulation {
+    padding-inline: 12px;
+  }
+
+  .simulation__input-txt {
+    min-height: 190px;
+  }
 }

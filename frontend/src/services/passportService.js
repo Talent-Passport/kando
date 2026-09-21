@@ -1,23 +1,84 @@
-const USAR_MOCK = true; // troque pra false quando o backend estiver pronto
+import { getUser } from "./api";
+import { listPassports } from "./talentPassportService";
 
-const DADOS_MOCK = {
-  nome: "Nícolas Silva Gomes",
-  role: "FRONTEND",
-  title: "ESPECIALISTA",
+// Aggregator/view-model for the Talent Passport certificate: combines
+// listPassports() (talentPassportService.js) with getUser() (api.js) into
+// the shape PassportCertificate.jsx consumes. Not to be confused with
+// talentPassportService.js, which is the raw API client this file wraps.
+
+// professional_profile.overall_level values (junior/mid_level/senior/expert).
+const OVERALL_LEVEL_LABELS = {
+  junior: "JÚNIOR",
+  mid_level: "PLENO",
+  senior: "SÊNIOR",
+  expert: "ESPECIALISTA",
 };
 
-export async function buscarDadosPassaporte(id) {
-  if (USAR_MOCK) {
-    return new Promise((resolve) => {
-      setTimeout(() => resolve(DADOS_MOCK), 300);
-    });
+// Stamp proficiency labels. "blocked" is applied by PassportCertificate.jsx
+// itself whenever a stamp isn't validated, regardless of the score-derived
+// bucket below.
+export const PROFICIENCY_LABELS = {
+  beginner: "INICIANTE",
+  intermediate: "INTERMEDIÁRIO",
+  advanced: "AVANÇADO",
+  expert: "EXPERT",
+  blocked: "A CONQUISTAR",
+};
+
+// Must match the number of stamp layouts in PassportCertificate.jsx.
+const MAX_CARIMBOS = 6;
+
+// A stamp is only unlocked once the candidate has demonstrated that skill in
+// the assessment (dashboard_summary.performance_by_skill), not merely
+// claimed it on the resume.
+const SKILL_VALIDATION_THRESHOLD = 40;
+
+// dashboard_summary.performance_by_skill score (0-100) -> proficiency bucket
+// shown on the stamp when it's validated.
+function nivelPorNota(nota) {
+  if (nota >= 85) return "expert";
+  if (nota >= 70) return "advanced";
+  if (nota >= 50) return "intermediate";
+  return "beginner";
+}
+
+/**
+ * Fetches and reshapes the data PassportCertificate.jsx needs to render
+ * the certificate: candidate name, best area, overall level label, and up
+ * to MAX_CARIMBOS stamps (skill + proficiency + validated flag).
+ * @returns {Promise<{nome: string, role: string, title: string, carimbos: Array<{skill: string, nivel: string, validado: boolean}>}>}
+ * @throws {Error} if the user has no successful passport yet
+ */
+export async function buscarDadosPassaporte() {
+  const passportsResponse = await listPassports();
+  const passport = (passportsResponse.data || []).find((item) => item.success);
+
+  if (!passport) {
+    throw new Error("Nenhum Talent Passport gerado ainda.");
   }
 
-  const res = await fetch(`/api/passaporte/${id}`);
+  const userId = localStorage.getItem("user_id");
+  const nome = userId ? (await getUser(userId)).data.full_name : "";
 
-  if (!res.ok) {
-    throw new Error(`Erro ${res.status} ao buscar dados do passaporte`);
-  }
+  const level = passport.professional_profile?.overall_level;
+  const bestArea = passport.dashboard_summary?.best_area || "";
 
-  return res.json();
+  // Already sorted highest-to-lowest by the backend
+  // (assessments/services/score_aggregation.consolidate_skills), so slicing
+  // to MAX_CARIMBOS naturally keeps the best-demonstrated skills.
+  const performanceBySkill = passport.dashboard_summary?.performance_by_skill || {};
+  const carimbos = Object.entries(performanceBySkill)
+    .slice(0, MAX_CARIMBOS)
+    .map(([skill, nota]) => ({
+      skill,
+      nivel: nivelPorNota(nota),
+      validado: nota >= SKILL_VALIDATION_THRESHOLD,
+    }));
+
+  return {
+    nome: nome || "",
+    role: bestArea.toUpperCase(),
+    title: OVERALL_LEVEL_LABELS[level] || level?.toUpperCase() || "",
+    carimbos,
+  };
 }

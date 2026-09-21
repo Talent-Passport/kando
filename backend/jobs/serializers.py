@@ -6,7 +6,7 @@ from .models import JobPostingSubmission, JobPostingNormalization
 
 
 MIN_RAW_TEXT_LENGTH = 150
-MAX_RAW_TEXT_LENGTH = 10_000
+MAX_RAW_TEXT_LENGTH = 50_000
 
 MAX_PDF_SIZE = 5 * 1024 * 1024  # 5 MB
 PDF_SIGNATURE = b"%PDF-"
@@ -39,14 +39,12 @@ def validate_job_text(text):
 
     if len(cleaned_text) < MIN_RAW_TEXT_LENGTH:
         raise serializers.ValidationError(
-            f"A vaga deve ter no mínimo "
-            f"{MIN_RAW_TEXT_LENGTH} caracteres."
+            f"A vaga deve conter pelo menos {MIN_RAW_TEXT_LENGTH} caracteres."
         )
 
     if len(cleaned_text) > MAX_RAW_TEXT_LENGTH:
         raise serializers.ValidationError(
-            f"A vaga não pode exceder "
-            f"{MAX_RAW_TEXT_LENGTH} caracteres."
+            f"A vaga não pode exceder {MAX_RAW_TEXT_LENGTH} caracteres."
         )
 
     return cleaned_text
@@ -197,7 +195,7 @@ class JobPostingSerializer(serializers.ModelSerializer):
             if not pdf:
                 raise serializers.ValidationError({
                     "pdf": (
-                        "Um arquivo PDF é obrigatório quando source='pdf'."
+                        "É necessário um arquivo PDF quando source='pdf'."
                     )
                 })
 

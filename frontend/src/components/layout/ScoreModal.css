@@ -1,48 +1,46 @@
-.scoreModal {
+.score-modal {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   gap: 5px;
-  padding: 20px;
   text-align: center;
   position: relative;
-  margin-top: 20px;
 }
 
-.scoreModal__close_button {
+.score-modal__close-button {
   position: absolute;
-  right: -18px;
-  top: -9px;
+  right: -25px;
+  top: -24px;
   border: none;
   background-color: transparent;
   color: #26215c;
 }
 
-.scoreModal__close_button:hover {
+.score-modal__close-button:hover {
   cursor: pointer;
 }
 
-.scoreModal__title {
+.score-modal__title {
   color: #26215c;
   font-weight: bold;
 }
 
-.scoreModal__subtitle {
+.score-modal__subtitle {
   font-size: 15px;
 }
-.scoreModal__list {
+.score-modal__list {
   list-style-type: circle;
   list-style-type: none;
-
   display: flex;
   flex-direction: column;
   width: 100%;
   padding: 0;
+  margin: 8px 0;
 }
-.scoreModal__item {
+.score-modal__item {
   color: rgb(59, 59, 59);
-  font-size: 16px;
+  font-size: 15px;
   padding: 15px;
   border-radius: 10px;
   margin-top: 10px;
@@ -56,7 +54,7 @@
     background-color 0.2s ease,
     box-shadow 0.2s ease;
 }
-.scoreModal__button {
+.score-modal__button {
   border: none;
   background-color: #26215c;
   color: white;
@@ -71,7 +69,39 @@
     box-shadow 0.2s ease;
 }
 
-.scoreModal__button:hover {
+.score-modal__button:hover {
   transform: translateY(-2px);
   transition: all 0.2s ease;
+}
+
+@media (max-width: 600px) {
+  .score-modal {
+    margin-top: 12px;
+    padding-top: 16px;
+  }
+
+  .score-modal__close-button {
+    top: -6px;
+    right: -6px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .score-modal__title {
+    padding-inline: 28px;
+    font-size: 20px;
+  }
+
+  .score-modal__subtitle,
+  .score-modal__item {
+    font-size: 14px;
+  }
+
+  .score-modal__item {
+    padding: 12px;
+  }
+
+  .score-modal__button {
+    min-height: 44px;
+  }
 }

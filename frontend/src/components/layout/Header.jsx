@@ -1,50 +1,193 @@
+import { useEffect, useState } from "react";
 import "./Header.css";
-import { useNavigate, Link } from "react-router-dom";
+import { useLocation, useNavigate, Link } from "react-router-dom";
+import logo from "../../assets/logo.svg";
+import logoffIcon from "../../assets/logoff-icon.svg";
+import { listMatches } from "../../services/api";
+import SimulationGateModal from "./SimulationGateModal";
+
+// Global nav, rendered at the top of every authenticated page.
+// Props: `menuActive` (bool, optional) - forces the full nav menu to show
+// even before a match exists (used by pages that are themselves part of
+// the pre-match flow). Without it, the menu only appears once the user has
+// a completed match (`hasCompletedMatch`, backed by localStorage +
+// `listMatches()`), since most of the links it contains (Dashboard, Trilha
+// de estudo, Talent Passport) lead nowhere useful before that.
+// The "Simulado" link is intercepted (via SimulationGateModal) once a
+// simulation is already completed, since redoing it requires a fresh
+// resume/job comparison rather than just clicking the link again.
+const SIMULATION_COMPLETED_KEY = "kando_simulation_completed";
+const MATCH_COMPLETED_KEY = "kando_has_match";
 
 export default function Header({ menuActive }) {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const [hasCompletedMatch, setHasCompletedMatch] = useState(
+    () => localStorage.getItem(MATCH_COMPLETED_KEY) === "true",
+  );
+  const [hasCompletedSimulation, setHasCompletedSimulation] = useState(
+    () => localStorage.getItem(SIMULATION_COMPLETED_KEY) === "true",
+  );
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showSimulationGateModal, setShowSimulationGateModal] = useState(false);
+
+  useEffect(() => {
+    // Once a match is known to exist (from this check or from Score/StudyPath
+    // reporting one via "match-completed"), skip re-fetching it on every
+    // page navigation - it never goes back to false.
+    if (menuActive || hasCompletedMatch) return;
+
+    let cancelled = false;
+
+    listMatches()
+      .then((response) => {
+        if (cancelled) return;
+        const results = response.data || [];
+        if (results.some((match) => match.success)) {
+          localStorage.setItem(MATCH_COMPLETED_KEY, "true");
+          setHasCompletedMatch(true);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [menuActive, hasCompletedMatch]);
+
+  const showMenu = menuActive || hasCompletedMatch;
+
+  useEffect(() => {
+    const updateSimulationStatus = () => {
+      setHasCompletedSimulation(
+        localStorage.getItem(SIMULATION_COMPLETED_KEY) === "true",
+      );
+    };
+    const updateMatchStatus = () => {
+      if (localStorage.getItem(MATCH_COMPLETED_KEY) === "true") {
+        setHasCompletedMatch(true);
+      }
+    };
+
+    window.addEventListener("simulation-completed", updateSimulationStatus);
+    window.addEventListener("match-completed", updateMatchStatus);
+    window.addEventListener("storage", updateSimulationStatus);
+    window.addEventListener("storage", updateMatchStatus);
+
+    return () => {
+      window.removeEventListener(
+        "simulation-completed",
+        updateSimulationStatus,
+      );
+      window.removeEventListener("match-completed", updateMatchStatus);
+      window.removeEventListener("storage", updateSimulationStatus);
+      window.removeEventListener("storage", updateMatchStatus);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setIsMenuOpen(false);
+    };
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [isMenuOpen]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user_id");
+    localStorage.removeItem("kando_user");
+    localStorage.removeItem(SIMULATION_COMPLETED_KEY);
+    localStorage.removeItem(MATCH_COMPLETED_KEY);
+    navigate("/", { replace: true });
+  };
+
+  const handleSimulationClick = (event) => {
+    if (hasCompletedSimulation) {
+      event.preventDefault();
+      setShowSimulationGateModal(true);
+    }
+  };
+
+  const handleNewComparison = () => {
+    setShowSimulationGateModal(false);
+    navigate("/upload");
+  };
+
   return (
     <header className="header">
-      <svg
-        className="header__tp-icon"
-        xmlns="http://www.w3.org/2000/svg"
-        width="1024"
-        height="1024"
-        viewBox="0 0 1024 1024"
+      <Link
+        to={hasCompletedSimulation ? "/dashboard" : "/upload"}
+        className="header__logo-link"
       >
-        <g>
-          <path
-            d="M 327.00 613.11 L 327.00 333.00 L 241.50 333.00 L 156.00 333.00 L 156.00 271.00 L 156.00 209.00 L 388.00 209.00 L 620.00 209.00 L 620.00 270.99 L 620.00 332.99 L 537.99 333.24 L 455.98 333.50 L 456.00 574.69 L 456.01 815.89 L 406.25 845.80 C378.89,862.25 350.44,879.42 343.03,883.97 C335.63,888.51 328.99,892.45 328.28,892.72 C327.24,893.12 327.00,840.55 327.00,613.11 ZM 475.00 584.61 L 475.00 363.00 L 539.00 363.00 L 603.00 363.00 L 603.00 439.00 L 603.00 515.00 L 647.78 515.00 C672.82,515.00 696.21,514.54 700.85,513.96 C738.83,509.20 767.84,483.40 778.20,445.18 C780.96,434.97 781.22,411.89 778.69,401.67 C770.51,368.72 746.22,344.09 713.82,335.90 C706.56,334.06 701.59,333.73 674.75,333.28 L 644.00 332.76 L 644.00 270.74 L 644.00 208.72 L 681.75 209.30 C722.87,209.94 733.63,210.94 753.36,215.92 C787.87,224.64 816.11,240.01 840.97,263.61 C877.63,298.41 900.61,345.30 907.06,398.50 C909.78,420.94 908.06,451.88 902.82,474.50 C887.30,541.49 837.08,595.90 772.77,615.40 C743.09,624.39 725.56,626.00 657.04,626.00 L 603.02 626.00 L 602.76 677.58 L 602.50 729.16 L 569.00 749.34 C493.41,794.88 479.53,803.26 477.32,804.71 L 475.00 806.23 L 475.00 584.61 Z"
-            fill="#ffffff"
-          />
-        </g>
-      </svg>
-      {menuActive && (
-        <nav className="header__links">
-          <Link className="header__link">Dashboard</Link>
-          <Link className="header__link">Resultados</Link>
-          <Link className="header__link">Trilha de estudo</Link>
-          <Link className="header__link">Talent Passport</Link>
+        <img className="header__tp-icon" src={logo} alt="Kando" />
+      </Link>
+      {showMenu && (
+        <button
+          className={`header__menu-button ${isMenuOpen ? "header__menu-button--open" : ""}`}
+          type="button"
+          aria-label={isMenuOpen ? "Fechar menu" : "Abrir menu"}
+          aria-controls="header-navigation"
+          aria-expanded={isMenuOpen}
+          onClick={() => setIsMenuOpen((open) => !open)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+      )}
+      {showMenu && (
+        <nav
+          id="header-navigation"
+          className={`header__links ${isMenuOpen ? "header__links--open" : ""}`}
+          aria-label="Navegação principal"
+          onClick={() => setIsMenuOpen(false)}
+        >
+          <Link
+            to="/dashboard"
+            className={`header__link ${pathname === "/dashboard" ? "header__link--active" : ""}`}
+          >
+            Dashboard
+          </Link>
+          <Link
+            to="/upload"
+            className={`header__link ${pathname === "/upload" ? "header__link--active" : ""}`}
+          >
+            Comparar vaga
+          </Link>
+          <Link
+            to="/simulation/instructions"
+            className={`header__link ${pathname === "/simulation/instructions" ? "header__link--active" : ""}`}
+            onClick={handleSimulationClick}
+          >
+            Simulado
+          </Link>
+          <Link
+            to="/study-path"
+            className={`header__link ${pathname === "/study-path" ? "header__link--active" : ""}`}
+          >
+            Trilha de estudo
+          </Link>
+          <Link
+            to="/talent-passport"
+            className={`header__link ${pathname === "/talent-passport" ? "header__link--active" : ""}`}
+          >
+            Talent Passport
+          </Link>
         </nav>
       )}
-      <button className="header__logoff-button">
-        <svg
-          className="header__logoff-icon"
-          xmlns="http://www.w3.org/2000/svg"
-          width="800px"
-          height="800px"
-          viewBox="0 0 24 24"
-          fill="none"
-        >
-          <path
-            d="M15 16.5V19C15 20.1046 14.1046 21 13 21H6C4.89543 21 4 20.1046 4 19V5C4 3.89543 4.89543 3 6 3H13C14.1046 3 15 3.89543 15 5V8.0625M11 12H21M21 12L18.5 9.5M21 12L18.5 14.5"
-            stroke="#ffffff"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
+      <button className="header__logoff-button" type="button" onClick={handleLogout}>
+        <img className="header__logoff-icon" src={logoffIcon} alt="" />
         Sair
       </button>
+      <SimulationGateModal
+        openModal={showSimulationGateModal}
+        closeModal={() => setShowSimulationGateModal(false)}
+        newComparison={handleNewComparison}
+      />
     </header>
   );
 }

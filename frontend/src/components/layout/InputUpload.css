@@ -11,13 +11,13 @@
     outline-color 0.2s ease;
 }
 
-.upload__input-onDrag {
+.upload__input--on-drag {
   border: none;
   outline: 4px dashed rgb(175, 175, 175);
   outline-offset: -10px;
 }
 
-.upload__input-hasFile {
+.upload__input--has-file {
   border: none;
 }
 
@@ -42,23 +42,24 @@
   }
 }
 
-.upload__preview_content {
+.upload__preview-content {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  position: relative;
   flex: 1;
   min-height: 0;
   min-width: 0;
   width: 100%;
 }
 
-.upload__preview_page {
+.upload__preview-page {
   /* react-pdf sets min-width/min-height: min-content inline, which blocks shrinking */
   min-height: 0 !important;
   min-width: 0 !important;
 }
 
-.upload__preview_page canvas {
+.upload__preview-page canvas {
   max-width: 100% !important;
   max-height: 100% !important;
   width: auto !important;
@@ -67,8 +68,11 @@
   object-fit: contain;
 }
 
-.upload__preview_pages {
-  flex-shrink: 0;
+.upload__preview-pages {
+  position: absolute;
+  right: 0;
+  bottom: 4px;
+  left: 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -77,8 +81,6 @@
   margin: 0;
   list-style-type: none;
   text-align: center;
-  position: relative;
-  top: 0;
 }
 
 .upload__dropzone {
@@ -100,16 +102,18 @@
   height: auto;
 }
 
-.upload__icon-onDrag {
+.upload__icon--on-drag {
   width: 60px;
 }
 
 .upload__text {
   color: rgb(201, 201, 201);
   opacity: 1;
+  text-align: center;
+  text-wrap: balance;
 }
 
-.upload__file_list {
+.upload__file-list {
   flex-shrink: 0;
   height: 20px;
   min-width: 0;
@@ -127,7 +131,7 @@
   min-width: 0;
 }
 
-.upload__file_name {
+.upload__file-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -140,7 +144,7 @@
   padding-left: 2px;
 }
 
-.upload__file_delete-button {
+.upload__file-delete-button {
   border: none;
   background-color: transparent;
   font-size: 10px;
@@ -148,6 +152,31 @@
   max-height: 15px;
 }
 
-.upload__file_delete-button_icon {
+.upload__file-delete-button-icon {
   width: 13px;
+}
+
+@media (max-width: 680px) {
+  .upload__input,
+  .upload__dropzone {
+    width: 100%;
+    max-width: none;
+    min-height: 220px;
+  }
+
+  .upload__dropzone {
+    padding: 32px 16px;
+  }
+
+  .upload__text {
+    max-width: 260px;
+    text-align: center;
+  }
+}
+
+@media (max-width: 380px) {
+  .upload__input,
+  .upload__dropzone {
+    min-height: 200px;
+  }
 }

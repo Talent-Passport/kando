@@ -1,23 +1,42 @@
 .slider {
+  box-sizing: border-box;
+  width: 100%;
   display: flex;
+  align-items: center;
+  gap: 4px;
   padding-left: 50px;
 }
 
 .value {
+  min-width: 28px;
+  flex-shrink: 0;
   align-self: center;
+}
+
+.sliderRoot {
+  flex: 1;
+  min-width: 0;
+  max-width: 500px;
 }
 
 .Control {
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  width: 500px;
+  width: 100%;
   padding-block: 0.75rem;
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
   padding-right: 10px;
   padding-left: 10px;
+}
+
+@media (max-width: 700px) {
+  .slider {
+    padding-left: 0;
+  }
+
 }
 
 .Track {
@@ -27,20 +46,12 @@
   -webkit-user-select: none;
   user-select: none;
   border-radius: 15px;
-
-  @media (prefers-color-scheme: dark) {
-    background-color: oklch(26.9% 0 0deg);
-  }
 }
 
 .Indicator {
   background-color: oklch(14.5% 0 0deg);
   -webkit-user-select: none;
   user-select: none;
-
-  @media (prefers-color-scheme: dark) {
-    background-color: white;
-  }
 }
 
 .Thumb {
@@ -53,17 +64,8 @@
   -webkit-user-select: none;
   user-select: none;
 
-  @media (prefers-color-scheme: dark) {
-    border: 1px solid white;
-    background-color: oklch(14.5% 0 0deg);
-  }
-
   &:has(:focus-visible) {
     outline: 2px solid oklch(14.5% 0 0deg);
     outline-offset: 2px;
-
-    @media (prefers-color-scheme: dark) {
-      outline-color: white;
-    }
   }
 }

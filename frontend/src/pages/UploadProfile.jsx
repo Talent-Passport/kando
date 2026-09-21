@@ -1,10 +1,12 @@
 import Header from "../components/layout/Header";
 import "./UploadProfile.css";
 import InputUpload from "../components/layout/InputUpload";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import textFieldIcon from "../assets/text-field.svg";
-import { useNavigate } from "react-router-dom";
-import { login, setAPIJobText } from "../services/api";
+import { useLocation, useNavigate } from "react-router-dom";
+import { createJobPosting, createResume } from "../services/api";
+import { setUploadPromises } from "../utils/uploadTracker";
+import { Toaster, toast } from "react-hot-toast";
 
 export default function UploadProfile() {
   const [resumeFile, setResumeFile] = useState(null);
@@ -14,9 +16,21 @@ export default function UploadProfile() {
   const [jobText, setJobText] = useState(null);
 
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const uploadError = location.state?.uploadError;
+    if (!uploadError) return;
+
+    toast.error(uploadError, {
+      id: "returned-upload-error",
+      duration: 10000,
+    });
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
 
   function isTextInvalid(text) {
-    return !text || text.length < 150 || text.length > 3500;
+    return !text || text.length < 150 || text.length > 20000;
   }
 
   function getTextError(text) {
@@ -24,8 +38,8 @@ export default function UploadProfile() {
     if (text.length < 150) {
       return `Mínimo de 150 caracteres (${text.length}/150)`;
     }
-    if (text.length > 3500) {
-      return `Máximo de 3500 caracteres excedido (${text.length}/3500)`;
+    if (text.length > 20000) {
+      return `Máximo de 20.000 caracteres excedido (${text.length}/20000)`;
     }
     return null;
   }
@@ -33,26 +47,27 @@ export default function UploadProfile() {
   const resumeOk = resumeFile || !isTextInvalid(resumeText);
   const jobOk = jobFile || !isTextInvalid(jobText);
 
-  const handleSubmit = async (e) => {
-    console.log(e.target[0]);
-
+  const handleSubmit = (e) => {
     e.preventDefault();
-    const objJobText = {
-      source: "text",
-      raw_text: jobText,
-    };
-
-    try {
-      const res = await setAPIJobText(objJobText);
-      console.log(res);
-    } catch (error) {
-      console.log(error);
-    }
+    const jobP = createJobPosting(jobFile || jobText);
+    const resumeP = createResume(resumeFile || resumeText);
+    setUploadPromises(jobP, resumeP);
     navigate("/upload/reliability");
   };
 
   return (
     <>
+      <Toaster
+        position="top-right"
+        containerStyle={{ top: 64, left: 12, right: 12, zIndex: 11000 }}
+        toastOptions={{
+          style: {
+            maxWidth: "min(420px, calc(100vw - 24px))",
+            overflowWrap: "anywhere",
+            whiteSpace: "pre-line",
+          },
+        }}
+      />
       <Header menuActive={false} />
       <div className="upload">
         <h1 className="upload__title">Compare suas habilidades</h1>
@@ -61,25 +76,25 @@ export default function UploadProfile() {
             <p className="upload__input-title">Meu currículo</p>
             <div
               className={`upload__pdf-collapse${
-                resumeText ? " upload__pdf-collapse_collapsed" : ""
+                resumeText ? " upload__pdf-collapse--collapsed" : ""
               }`}
             >
-              <div className="upload__pdf-collapse__inner">
+              <div className="upload__pdf-collapse-inner">
                 <InputUpload onFileChange={setResumeFile} />
               </div>
             </div>
             <div
               className={`upload__pdf-collapse${
-                resumeFile ? " upload__pdf-collapse_collapsed" : ""
+                resumeFile ? " upload__pdf-collapse--collapsed" : ""
               }`}
             >
-              <div className="upload__pdf-collapse__inner">
+              <div className="upload__pdf-collapse-inner">
                 {!resumeText && <p className="upload__ou">ou</p>}
                 <div className="upload__txt-wrap">
                   <textarea
                     className={
                       resumeText
-                        ? "upload__input-txt upload__input-text_solid"
+                        ? "upload__input-txt upload__input-text--solid"
                         : "upload__input-txt"
                     }
                     placeholder="Cole aqui seu currículo"
@@ -100,30 +115,30 @@ export default function UploadProfile() {
               </div>
             </div>
           </div>
-          <div className="vertical-line"></div>
+          <div className="upload__vertical-line"></div>
           <div className="upload__inputs-pdf">
             <p className="upload__input-title">Descrição da vaga</p>
             <div
               className={`upload__pdf-collapse${
-                jobText ? " upload__pdf-collapse_collapsed" : ""
+                jobText ? " upload__pdf-collapse--collapsed" : ""
               }`}
             >
-              <div className="upload__pdf-collapse__inner">
+              <div className="upload__pdf-collapse-inner">
                 <InputUpload onFileChange={setJobFile} />
               </div>
             </div>
             <div
               className={`upload__pdf-collapse${
-                jobFile ? " upload__pdf-collapse_collapsed" : ""
+                jobFile ? " upload__pdf-collapse--collapsed" : ""
               }`}
             >
-              <div className="upload__pdf-collapse__inner">
+              <div className="upload__pdf-collapse-inner">
                 {!jobText && <p className="upload__ou">ou</p>}
                 <div className="upload__txt-wrap">
                   <textarea
                     className={
                       jobText
-                        ? "upload__input-txt upload__input-text_solid"
+                        ? "upload__input-txt upload__input-text--solid"
                         : "upload__input-txt"
                     }
                     placeholder="Cole aqui a descrição da vaga"
@@ -145,9 +160,9 @@ export default function UploadProfile() {
 
           <div className="upload__compare-button-wrap">
             <button
+              type="submit"
               className="upload__compare-button"
               disabled={!resumeOk || !jobOk}
-              onClick={handleSubmit}
             >
               Avançar
             </button>

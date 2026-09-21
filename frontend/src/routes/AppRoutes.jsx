@@ -1,6 +1,7 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import ProtectedRoute from "../components/layout/ProtectedRoute";
 
+import HomePage from "../pages/HomePage";
 import Login from "../pages/Login";
 import Signup from "../pages/Signup";
 import Dashboard from "../pages/Dashboard";
@@ -8,7 +9,6 @@ import UploadProfile from "../pages/UploadProfile";
 import Score from "../pages/Score";
 import SimulationInstructions from "../pages/SimulationInstructions";
 import SimulationQuestions from "../pages/SimulationQuestions";
-import Report from "../pages/Report";
 import TalentPassport from "../pages/TalentPassport";
 import StudyPath from "../pages/StudyPath";
 import Reliability from "../pages/Reliability";
@@ -16,7 +16,7 @@ import Reliability from "../pages/Reliability";
 export default function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
 
@@ -65,14 +65,6 @@ export default function AppRoutes() {
         element={
           <ProtectedRoute>
             <SimulationQuestions />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/report"
-        element={
-          <ProtectedRoute>
-            <Report />
           </ProtectedRoute>
         }
       />

@@ -1,20 +1,11 @@
 """LLM-based normalization of job posting text (extraction/normalization step).
 
-Runs after text extraction (PDF via docling, or plain text), before the
+Runs after text extraction (PDF via pdfplumber, or plain text), before the
 JobPostingSubmission is persisted. Requires GROQ_API_KEY in the environment.
 """
 
-import json
-import os
-import time
-from string import Template
-
-from groq import Groq
-
-from ai_core.models import Prompt, PromptCallMetadata
-
-client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+from ai_core.llm import run_prompt_safe
+from ai_core.json_contracts import canonicalize_json
 
 PROMPT_KEY = "job_normalization"
 
@@ -22,72 +13,37 @@ PROMPT_KEY = "job_normalization"
 # pylint: disable=duplicate-code
 
 
-def _call_llm(text: str) -> dict:
-    prompt_row = None
-    formatted_prompt = ""
-    output_text = None
-    error_message = None
-    usage = None
-    status = PromptCallMetadata.Status.API_ERROR
-    started_at = time.monotonic()
-    try:
-        prompt_row = Prompt.objects.get(prompt_description=PROMPT_KEY, is_active=True)
-        formatted_prompt = Template(prompt_row.prompt_detail).safe_substitute(vaga=text)
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": formatted_prompt}],
-            temperature=0.2,
-            response_format={"type": "json_object"},
-        )
-        usage = response.usage
-        output_text = response.choices[0].message.content
-        output_data = json.loads(output_text)
-        status = PromptCallMetadata.Status.SUCCESS
-        return output_data
-    except Prompt.DoesNotExist as exc:
-        error_message = str(exc)
-        status = PromptCallMetadata.Status.PROMPT_MISSING
-        raise
-    except json.JSONDecodeError as exc:
-        error_message = str(exc)
-        status = PromptCallMetadata.Status.INVALID_JSON
-        raise
-    except Exception as exc:
-        error_message = str(exc)
-        status = PromptCallMetadata.Status.API_ERROR
-        raise
-    finally:
-        PromptCallMetadata.objects.create(
-            prompt=prompt_row,
-            prompt_description=prompt_row.prompt_description if prompt_row else PROMPT_KEY,
-            version=prompt_row.version if prompt_row else None,
-            model_name=MODEL,
-            status=status,
-            input_text=formatted_prompt,
-            output_text=output_text,
-            error_message=error_message,
-            prompt_tokens=getattr(usage, "prompt_tokens", None),
-            completion_tokens=getattr(usage, "completion_tokens", None),
-            total_tokens=getattr(usage, "total_tokens", None),
-            duration_ms=int((time.monotonic() - started_at) * 1000),
-        )
+def canonicalize_job_title(structured_data: dict) -> dict:
+    """Store the normalized job title under the canonical ``job_title`` key.
+
+    Accepts multiple possible title key shapes and normalizes them to
+    ``job_title``, removing the others so persisted data has one source of
+    truth for the title.
+    """
+    job_details = structured_data.get("job")
+    nested_title = job_details.get("title") if isinstance(job_details, dict) else None
+    job_title = (
+        structured_data.get("job_title")
+        or structured_data.get("job_posting_title")
+        or nested_title
+    )
+
+    structured_data["job_title"] = job_title or ""
+    structured_data.pop("job_posting_title", None)
+    if isinstance(job_details, dict):
+        job_details.pop("title", None)
+    return structured_data
 
 
 def normalize_job_posting(text: str) -> dict:
-    """
-    Returns the structured JSON from the LLM on success, or
-    {"error": str, "retryable": bool} on failure.
-    """
+    """Return the normalized job JSON, or an {"error", "retryable"} dict on failure."""
     if not text or not text.strip():
-        return {"error": "Texto da vaga vazio", "retryable": False}
-    try:
-        return _call_llm(text)
-    except Prompt.DoesNotExist:
-        return {"error": "Prompt de normalização não configurado", "retryable": False}
-    except json.JSONDecodeError:
-        return {"error": "O LLM retornou um JSON inválido", "retryable": True}
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        # Service boundary: any failure calling the LLM must degrade to
-        # {"error": ...} instead of propagating, so JobPostingSubmission creation
-        # never breaks because the LLM call failed.
-        return {"error": f"Falha ao chamar o LLM: {exc}", "retryable": True}
+        return {"error": "O texto da vaga está vazio", "retryable": False}
+    result = run_prompt_safe(
+        PROMPT_KEY,
+        {"job": text},
+        missing_prompt_message="Prompt de normalização da vaga não configurado",
+    )
+    if "error" in result:
+        return result
+    return canonicalize_job_title(canonicalize_json(result))

@@ -1,5 +1,10 @@
 """Authenticated API views for creating and accessing job postings."""
 
+# Shares the submission-preprocessing flow (serializer validation, PDF
+# extraction, text validation) with resumes.views by design; suppress the
+# cross-file duplicate-code report until that flow is extracted.
+# pylint: disable=duplicate-code
+
 from django.db import transaction
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
@@ -89,6 +94,21 @@ class JobPostingListCreateView(APIView):
             validated_data["raw_text"]
         )
 
+        # Content-type gate: when the LLM identifies the text as not a job
+        # posting (for example a resume pasted into the job field), reject with
+        # 400 and do not persist, so mismatched documents never enter the
+        # database. Only an explicit ``True`` rejects; an absent field or a
+        # technical error falls through unchanged.
+        if normalization_result.get("invalid_input") is True:
+            reason = normalization_result.get("invalid_input_reason")
+            return Response(
+                {"detail": reason or (
+                    "O texto enviado não parece ser uma vaga. "
+                    "Verifique se você não colou um currículo por engano."
+                )},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         with transaction.atomic():
             job_posting = JobPostingSubmission.objects.create(
                 **validated_data
@@ -103,6 +123,9 @@ class JobPostingListCreateView(APIView):
                     )
                 )
             else:
+                # Drop the discriminator so it does not leak into the persisted
+                # structured data consumed by matching and question generation.
+                normalization_result.pop("invalid_input", None)
                 normalization = (
                     JobPostingNormalization.objects.create(
                         job_posting=job_posting,
@@ -149,7 +172,7 @@ class JobPostingDetailView(APIView):
 
         if job_posting is None:
             return Response(
-                {"detail": "Job posting não encontrada."},
+                {"detail": "Vaga não encontrada."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -166,7 +189,7 @@ class JobPostingDetailView(APIView):
 
         if job_posting is None:
             return Response(
-                {"detail": "Job posting não encontrada."},
+                {"detail": "Vaga não encontrada."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 

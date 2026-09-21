@@ -1,23 +1,21 @@
 import { useState, useEffect } from "react";
 
+// "token" is set directly by JoinForm.jsx on email/password login (via
+// services/api.js).
+function hasSession() {
+  return !!localStorage.getItem("token");
+}
+
+/**
+ * Session-state hook backed by localStorage.
+ * @returns {{ isAuthenticated: boolean }}
+ */
 export default function useAuth() {
-  const [isAuthenticated, setIsAuthenticated] = useState(
-    () => !!localStorage.getItem("kando_user"),
-  );
+  const [isAuthenticated, setIsAuthenticated] = useState(hasSession);
 
   useEffect(() => {
-    setIsAuthenticated(!!localStorage.getItem("kando_user"));
+    setIsAuthenticated(hasSession());
   }, []);
 
-  const login = (userData) => {
-    localStorage.setItem("kando_user", JSON.stringify(userData));
-    setIsAuthenticated(true);
-  };
-
-  const logout = () => {
-    localStorage.removeItem("kando_user");
-    setIsAuthenticated(false);
-  };
-
-  return { isAuthenticated, login, logout };
+  return { isAuthenticated };
 }

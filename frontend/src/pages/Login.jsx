@@ -1,8 +1,8 @@
 import "./Login.css";
 import WelcomePanel from "../components/layout/WelcomePanel";
 import JoinForm from "../components/layout/JoinForm";
-import GoogleButton from "../components/layout/GoogleButton";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import joinBackground from "../assets/join-background.png";
 
 export default function Login() {
   useEffect(() => {
@@ -15,7 +15,7 @@ export default function Login() {
       <section className="login__form">
         <img
           className="login__form-background"
-          src="./src/assets/join-background.png"
+          src={joinBackground}
           alt=""
         />
         <p className="login__title">Entrar</p>
@@ -26,10 +26,6 @@ export default function Login() {
           buttonText="Entrar"
           formType="login"
         />
-        <div className="login__divider">
-          <span className="login__divider_text">ou</span>
-        </div>
-        <GoogleButton />
       </section>
     </div>
   );

@@ -1,0 +1,365 @@
+/* AssessmentDashboard.css */
+.dashboard {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: clamp(300px, 70%, 1000px);
+  padding-bottom: 32px;
+}
+
+.dashboard__title {
+  align-self: flex-start;
+  font-size: 35px;
+  color: #26215c;
+}
+
+.dashboard__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 1.25rem;
+}
+
+.dashboard__metric-card {
+  background: #f4f4f2;
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.dashboard__metric-card-label {
+  font-size: 13px;
+  color: #757474;
+  margin: 0 0 6px;
+}
+
+.dashboard__metric-card-value {
+  font-size: 22px;
+  font-weight: 500;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.dashboard__summary {
+  background: #fff;
+  border: 0.5px solid #ddd;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  font-size: 15px;
+  color: #757474;
+  line-height: 1.5;
+}
+
+.dashboard__summary p {
+  text-align: center;
+  text-wrap: balance;
+}
+
+.dashboard__grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  margin-bottom: 1.25rem;
+}
+
+.dashboard__column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dashboard__column > .dashboard__panel {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.dashboard__panel {
+  background: #fff;
+  border: 0.5px solid #ddd;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.dashboard__panel-area {
+  background: #fff;
+  border: 0.5px solid #ddd;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.dashboard__panel--compact {
+  flex: 1;
+  margin-bottom: 0;
+
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  justify-content: center;
+}
+
+.dashboard__panel-title {
+  font-size: 16px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.dashboard__panel-icon {
+  font-size: 16px;
+  margin-right: 4px;
+}
+
+.dashboard__panel-icon--positive {
+  color: #3b6d11;
+}
+
+.dashboard__panel-icon--warning {
+  color: #993c1d;
+}
+
+.dashboard__panel-item {
+  font-size: 13px;
+  margin: 0 0 4px;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 10px;
+  text-align: center;
+  text-wrap: balance;
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.dashboard__panel-item:last-child {
+  margin-bottom: 0;
+}
+
+.dashboard__panel-item--positive {
+  background-color: rgb(92%, 95%, 87%);
+  color: rgb(79, 122, 79);
+}
+
+.dashboard__panel-item--warning {
+  background-color: rgb(98%, 93%, 85%);
+  color: rgb(124, 102, 68);
+}
+
+.dashboard__score-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.dashboard__score-bar:last-child {
+  margin-bottom: 0;
+}
+
+.dashboard__score-bar-label {
+  flex: 0 0 130px;
+  font-size: 13px;
+  color: #757474;
+}
+
+.dashboard__score-bar-track {
+  flex: 1;
+  height: 6px;
+  background: #f4f4f2;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.dashboard__score-bar-fill {
+  height: 100%;
+  background: #534ab7;
+}
+
+.dashboard__role-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.dashboard__role-list {
+  display: grid;
+  grid-auto-rows: 1fr;
+}
+
+.dashboard__role-row--divider {
+  border-bottom: 0.5px solid #ddd;
+}
+
+.dashboard__role-row-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.dashboard__role-row-fit {
+  flex: 0 1 60%;
+  max-width: 60%;
+  font-size: 13px;
+  color: #757474;
+}
+
+.dashboard__role-row-fit--highlight {
+  color: #534ab7;
+  font-weight: 500;
+}
+
+.dashboard__actions {
+  display: flex;
+  gap: 12px;
+}
+
+.dashboard__btn {
+  flex: 1;
+  font-size: 16px;
+  padding: 15px 16px;
+  border: 1px solid #cccccc;
+  border-radius: 10px;
+  background-color: #ffffff;
+  color: rgb(77, 77, 77);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.dashboard__btn:hover {
+  box-shadow:
+    0 4px 8px rgba(0, 0, 0, 0.12),
+    0 1px 3px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+@media (max-width: 800px) {
+  .dashboard__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .dashboard {
+    width: min(90%, 760px);
+  }
+
+  .dashboard__grid {
+    grid-template-columns: minmax(0, 3fr) minmax(220px, 2fr);
+  }
+
+  .dashboard__metric-card-value {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 700px) {
+  .dashboard {
+    width: 100%;
+    padding: 0 16px 24px;
+  }
+
+  .dashboard__title {
+    margin: 20px 0;
+    font-size: clamp(26px, 8vw, 32px);
+  }
+
+  .dashboard__grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .dashboard__summary,
+  .dashboard__panel,
+  .dashboard__panel-area {
+    padding: 14px 16px;
+  }
+
+  .dashboard__summary {
+    font-size: 14px;
+  }
+
+  .dashboard__panel--compact {
+    min-height: 120px;
+  }
+
+  .dashboard__actions {
+    margin-top: 4px;
+  }
+
+  .dashboard__btn {
+    min-height: 46px;
+    padding: 12px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 500px) {
+  .dashboard__actions {
+    flex-direction: column;
+  }
+
+  .dashboard__btn {
+    width: 100%;
+  }
+
+  .dashboard__role-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .dashboard__role-row-fit {
+    flex: none;
+    max-width: 100%;
+    text-align: left;
+  }
+
+  .dashboard__score-bar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .dashboard__score-bar-label {
+    flex-basis: auto;
+    width: auto;
+  }
+
+  .dashboard__score-bar-track {
+    width: 100%;
+    flex: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .dashboard {
+    padding-inline: 12px;
+  }
+
+  .dashboard__metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard__metric-card {
+    padding: 14px;
+  }
+}
