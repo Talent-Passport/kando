@@ -11,6 +11,9 @@ from ai_core.json_contracts import canonicalize_json
 
 PROMPT_KEY = "job_resume_matching_analysis"
 
+# The LLM service modules share the same call/logging boilerplate by design.
+# pylint: disable=duplicate-code
+
 
 def analyze_match(resume_structured_data: dict, job_structured_data: dict) -> dict:
     """Return the match-analysis JSON, or an {"error", "retryable"} dict on failure."""

@@ -9,6 +9,9 @@ from ai_core.json_contracts import canonicalize_json
 
 PROMPT_KEY = "job_normalization"
 
+# The LLM service modules share the same call/logging boilerplate by design.
+# pylint: disable=duplicate-code
+
 
 def canonicalize_job_title(structured_data: dict) -> dict:
     """Store the normalized job title under the canonical ``job_title`` key.

@@ -14,6 +14,9 @@ from .experience_calculation import (
 
 PROMPT_KEY = "resume_normalization"
 
+# The LLM service modules share the same call/logging boilerplate by design.
+# pylint: disable=duplicate-code
+
 
 def add_computed_experience_fields(structured_data: dict) -> None:
     """Insert technical_experience_years and calculated_seniority, computed in Python.
