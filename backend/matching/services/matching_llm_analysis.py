@@ -1,7 +1,7 @@
 """LLM-based compatibility analysis between a resume and a job posting.
 
 Runs on demand, after both the ResumeSubmission and the JobPostingSubmission
-have a successful normalization. Requires GROQ_API_KEY in the environment.
+have a successful normalization. Requires OPENROUTER_API_KEY in the environment.
 """
 
 import json

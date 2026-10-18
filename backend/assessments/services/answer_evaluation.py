@@ -1,7 +1,7 @@
 """Evaluate a candidate's answer to one assessment question via the LLM.
 
 Uses the ``question_answer`` prompt, once per answered question; requires
-GROQ_API_KEY. Results are combined in :mod:`score_aggregation`.
+OPENROUTER_API_KEY. Results are combined in :mod:`score_aggregation`.
 """
 
 import json

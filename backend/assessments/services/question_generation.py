@@ -1,6 +1,6 @@
 """Generate a readiness assessment from a resume and job posting via the LLM.
 
-Uses the ``question_generation`` prompt; requires GROQ_API_KEY.
+Uses the ``question_generation`` prompt; requires OPENROUTER_API_KEY.
 """
 
 from ai_core.llm import run_prompt_safe

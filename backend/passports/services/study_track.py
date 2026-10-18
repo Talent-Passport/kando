@@ -4,7 +4,7 @@ Combines data already produced by other apps (matching, profile
 recommendations, dashboard) — it does not invent a new skill or resource.
 Priority order is computed here in Python, deterministically; the LLM only
 writes the motivational narrative connecting the steps, without reordering or
-inventing resources. Requires GROQ_API_KEY in the environment.
+inventing resources. Requires OPENROUTER_API_KEY in the environment.
 """
 
 import json

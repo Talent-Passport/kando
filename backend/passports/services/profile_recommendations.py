@@ -1,7 +1,7 @@
 """LLM-generated professional profile and career recommendations for a Talent Passport.
 
 Combines the resume, match, and assessment analyses already produced by other
-apps into one narrative profile. Requires GROQ_API_KEY in the environment.
+apps into one narrative profile. Requires OPENROUTER_API_KEY in the environment.
 
 ``proficiency_level`` for each competency is computed here in Python, not by
 the LLM, from the resume's per-skill ``confidence_level`` — this keeps the

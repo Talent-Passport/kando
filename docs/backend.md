@@ -15,7 +15,8 @@ O backend do KANdo é uma API Django REST responsável por autenticação, persi
 - JWT (`djangorestframework-simplejwt`, 5.5.1)
 - `django-cors-headers` (4.9.0)
 - `pdfplumber` e `pypdfium2` para extração e processamento de PDFs
-- Groq para chamadas ao modelo de IA (SDK `groq`, 1.5.0 — único provider de IA do projeto)
+- OpenRouter para chamadas ao modelo de IA (SDK compatível `openai`, 3.16.2)
+- Modelo padrão: `dots-studio/dots-3-note-preview:free`
 - SQLite para desenvolvimento local
 - PostgreSQL/Supabase opcional para banco remoto (via `psycopg`)
 
@@ -76,7 +77,9 @@ As configurações são carregadas de `backend/.env`. Exemplo da estrutura atual
 do arquivo `.env`:
 
 ```env
-GROQ_API_KEYS=...
+OPENROUTER_API_KEY=...
+# OPENROUTER_API_KEYS=chave_1,chave_2
+OPENROUTER_MODEL=dots-studio/dots-3-note-preview:free
 
 DJANGO_SECRET_KEY=...
 DJANGO_DEBUG=True
@@ -99,9 +102,14 @@ A API usa SQLite quando `DATABASE_ENGINE` não é informado. Na configuração
 atual, `DATABASE_ENGINE=supabase` habilita PostgreSQL/Supabase por meio das
 variáveis `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST` e `DB_PORT`.
 
-`GROQ_API_KEYS` recebe uma ou mais chaves separadas por vírgula. O backend pode
-alternar entre elas quando uma chave atinge o limite de uso ou é rejeitada.
+`OPENROUTER_API_KEYS` recebe uma ou mais chaves separadas por vírgula e tem
+precedência sobre `OPENROUTER_API_KEY`. O backend pode alternar entre elas
+quando uma chave atinge o limite de uso ou é rejeitada. A migração substitui
+a Groq diretamente: as variáveis antigas `GROQ_*` não são mais lidas.
 Os valores sensíveis foram omitidos do exemplo e não devem ser versionados.
+
+Configure as novas variáveis também no Render antes de publicar esta versão.
+Os critérios de validação e rollback estão em [Operação da camada de IA](ai.md#operação-da-camada-de-ia).
 
 `DEBUG`, `ALLOWED_HOSTS` e as variáveis de CORS são sempre lidas do ambiente
 (`os.environ.get(...)`) — nunca hardcoded em `settings.py`.

@@ -1,7 +1,7 @@
 """LLM-based normalization of resume text (extraction/normalization step).
 
 Runs after text extraction (PDF via pdfplumber, or plain text), before the
-ResumeSubmission is persisted. Requires GROQ_API_KEY in the environment.
+ResumeSubmission is persisted. Requires OPENROUTER_API_KEY in the environment.
 """
 
 from ai_core.llm import run_prompt_safe

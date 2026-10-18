@@ -105,9 +105,10 @@ missing_skills
 
 Todo o acesso ao provedor de LLM passa por uma camada única, em `ai_core/llm.py`, que expõe
 `run_prompt` e `run_prompt_safe`. Os 7 módulos de negócio (tabela acima) chamam
-exclusivamente `run_prompt_safe` — nenhum deles fala diretamente com o SDK da Groq.
+exclusivamente `run_prompt_safe` — nenhum deles fala diretamente com o SDK do provedor.
 
-O SDK `groq` é importado apenas em `ai_core/llm.py` (e em seu teste correspondente), o que
+O SDK `openai`, configurado para chamar o OpenRouter, é importado apenas em
+`ai_core/llm.py` (e em seu teste correspondente), o que
 mantém a troca de provedor, modelo ou estratégia de retry centralizada num único ponto do
 código.
 
@@ -130,23 +131,36 @@ não há inconsistência entre o que o código pede e o que é populado no banco
 
 ## Operação da camada de IA
 
-A camada de IA usa a API da Groq. A configuração aceita uma chave única em
-`GROQ_API_KEY` ou múltiplas chaves, separadas por vírgula, em
-`GROQ_API_KEYS`. Quando ambas estão presentes, a lista de chaves tem
-precedência.
+A camada de IA usa a API do OpenRouter em `https://openrouter.ai/api/v1`, por
+meio do SDK compatível `openai` (3.16.2). A configuração aceita uma chave única
+em `OPENROUTER_API_KEY` ou múltiplas chaves, separadas por vírgula, em
+`OPENROUTER_API_KEYS`. Quando ambas estão presentes, a lista de chaves tem
+precedência; entradas vazias são descartadas. As variáveis antigas `GROQ_*`
+não são mais lidas. Uma chave do OpenRouter é necessária para inicializar a
+camada de IA; credenciais de outra API não são usadas como fallback.
 
 ```env
-GROQ_API_KEY=sua_chave_aqui
-# GROQ_API_KEYS=chave_1,chave_2
-GROQ_MODEL=openai/gpt-oss-120b
+OPENROUTER_API_KEY=sua_chave_aqui
+# OPENROUTER_API_KEYS=chave_1,chave_2
+OPENROUTER_MODEL=dots-studio/dots-3-note-preview:free
 ```
 
-> **Nota:** `openai/gpt-oss-120b` é também o default definido em `ai_core/llm.py`
-> (`MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")`), usado caso a variável
-> `GROQ_MODEL` não seja setada. O histórico de commits do repositório mostra trocas de
-> modelo idas e vindas (qwen → gpt → qwen → gpt), então vale sempre conferir
-> `ai_core/llm.py` e a variável efetivamente configurada em produção antes de assumir que
-> este exemplo continua atualizado.
+`dots-studio/dots-3-note-preview:free` é o padrão caso `OPENROUTER_MODEL` não
+seja definida. Em 18/10/2026, o OpenRouter lista a retirada desse preview para
+31/12/2026; mantenha o modelo configurável e confirme sua disponibilidade antes
+do deploy ([página do modelo](https://openrouter.ai/dots-studio/dots-3-note-preview:free)).
+
+Os prompts ativos, os contratos JSON, a temperatura padrão (`0.2`) e as
+mensagens de erro em português foram preservados. As chamadas continuam
+síncronas, sem streaming, com `response_format={"type": "json_object"}` e
+`provider.require_parameters=true` para exigir suporte aos parâmetros enviados.
+O raciocínio usa o padrão do modelo; não há ajuste automático de prompts,
+reparo de JSON ou fallback para outro modelo.
+
+O timeout do cliente permanece em 5 segundos para conexão e 60 segundos para
+leitura/escrita/pool. A geração de perguntas mantém seu override de 60 segundos
+e a avaliação de cada resposta, 30 segundos. Esses limites se aplicam a cada
+tentativa, não ao tempo total incluindo retries.
 
 Cada etapa depende de um prompt ativo no banco. Falhas como prompt ausente,
 JSON inválido, limite de uso ou indisponibilidade do provedor são retornadas
@@ -159,12 +173,47 @@ O tratamento de falhas transitórias é centralizado em `create_completion`
 (`ai_core/llm.py`), e não implementado individualmente por módulo:
 
 - Em rate limit, o tempo de espera é calculado a partir do header/mensagem retornado pelo
-  próprio erro da Groq, com teto de 10 segundos.
+  próprio erro do provedor, com teto de 10 segundos e padrão de 2 segundos.
 - É feita uma retentativa usando a mesma chave de API.
 - Se ainda assim falhar, o sistema faz fallback para a próxima chave configurada em
-  `GROQ_API_KEYS`.
+  `OPENROUTER_API_KEYS`; falhas de autenticação/permissão também permitem essa troca.
 - Em erro `400` do tipo "failed to validate json" (JSON malformado retornado pelo próprio
   modelo), também é feita uma retentativa antes de propagar a falha.
+- As duas retentativas automáticas do SDK são preservadas, além das retentativas
+  acima. Por exemplo, um rate limit HTTP persistente pode resultar em seis
+  tentativas HTTP por chave (três em cada chamada do wrapper).
+- Erros `402` por falta de crédito são falhas de configuração não retentáveis.
+  Reservas temporárias (`metadata.limit_source=openrouter_in_flight_budget` ou
+  header `Retry-After`) continuam retentáveis pelo fluxo chamador, sem uma nova
+  política de retry imediato ou troca de chave para esse caso.
+- Erros embutidos no corpo de respostas HTTP `200`, inclusive junto de conteúdo
+  parcial, são classificados como falhas antes de aceitar o JSON como sucesso.
+  Cada chamada lógica continua produzindo uma única linha de `PromptCallMetadata`.
+
+### Validação da migração e deploy
+
+Os testes automatizados usam SQLite e transporte HTTP simulado, sem chamar a
+API real. A chave abaixo é fictícia e serve apenas para inicializar o cliente:
+
+```bash
+cd backend
+DATABASE_ENGINE=sqlite OPENROUTER_API_KEY=test-only OPENROUTER_API_KEYS=test-only \
+  python -m pytest
+```
+
+Antes de publicar no Render, configure uma chave real do OpenRouter no ambiente
+local ou de homologação e valide os sete fluxos com entradas representativas e
+os mesmos prompts ativos: currículo, vaga, matching, geração de perguntas,
+avaliação de respostas, perfil do Passport e narrativa da trilha de estudo.
+Confira o JSON esperado em cada fluxo, texto em português, intervalos dos scores,
+cálculos determinísticos e conclusão dentro dos timeouts atuais. Inclua entrada
+inválida, resposta em branco e currículo/vaga com lacunas. A troca de modelo pode
+alterar conteúdo e latência, mesmo com os contratos preservados.
+
+Publique somente após essa validação e confira status, tokens e duração em
+`PromptCallMetadata`. Em caso de falha, restaure a revisão anterior com suas
+dependências e variáveis `GROQ_*`. Não é necessária migração de banco, e os
+prompts existentes não devem ser reescritos como parte desta troca.
 
 ## Limitações conhecidas
 
@@ -177,7 +226,7 @@ O tratamento de falhas transitórias é centralizado em `create_completion`
 > (`openai/gpt-oss-120b`) em um prazo de 24 horas. Essa migração emergencial explica
 > as trocas de modelo visíveis no histórico de commits (qwen → gpt → qwen → gpt) e
 > reforça a recomendação acima de sempre conferir `ai_core/llm.py` e a variável
-> `GROQ_MODEL` efetivamente configurada em produção, em vez de assumir que o modelo
+> `OPENROUTER_MODEL` efetivamente configurada em produção (antes da migração, `GROQ_MODEL`), em vez de assumir que o modelo
 > documentado aqui é definitivo — dado o precedente de descontinuações por parte do
 > provedor com pouco aviso prévio.
 

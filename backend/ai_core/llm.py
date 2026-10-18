@@ -3,7 +3,7 @@
 Fetches the active Prompt, calls the model, and records a PromptCallMetadata
 row. Callers supply the prompt key and the Template substitution values, so each
 service keeps its own prompt logic while the call and logging live here, next to
-the Prompt and PromptCallMetadata models. Requires GROQ_API_KEY, or GROQ_API_KEYS
+the Prompt and PromptCallMetadata models. Requires OPENROUTER_API_KEY, or OPENROUTER_API_KEYS
 (comma-separated) to fall back across multiple keys when one is rate-limited or
 rejected.
 """
@@ -15,11 +15,15 @@ import re
 import time
 from string import Template
 
-from groq import (
+import httpx2
+from openai import (
+    APIStatusError,
     AuthenticationError,
     BadRequestError,
-    Groq,
+    InternalServerError,
     NotFoundError,
+    OpenAI,
+    OpenAIError,
     PermissionDeniedError,
     RateLimitError,
 )
@@ -28,6 +32,9 @@ from .models import Prompt, PromptCallMetadata
 
 logger = logging.getLogger(__name__)
 
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_TIMEOUT = httpx2.Timeout(60.0, connect=5.0)
+DEFAULT_MAX_RETRIES = 2
 RATE_LIMIT_MAX_WAIT_SECONDS = 10.0
 RATE_LIMIT_DEFAULT_WAIT_SECONDS = 2.0
 RETRY_AFTER_MESSAGE_PATTERN = re.compile(r"try again in ([\d.]+)s")
@@ -35,26 +42,95 @@ JSON_VALIDATION_ERROR_PATTERN = re.compile(r"failed to validate json", re.IGNORE
 
 
 def load_api_keys() -> list[str | None]:
-    """Return the configured Groq API keys, in fallback order.
+    """Return the configured OpenRouter API keys, in fallback order.
 
-    GROQ_API_KEYS (comma-separated) takes precedence; falls back to the
-    single GROQ_API_KEY for backward compatibility.
+    OPENROUTER_API_KEYS (comma-separated) takes precedence over the
+    single OPENROUTER_API_KEY.
     """
-    raw = os.environ.get("GROQ_API_KEYS", "")
+    raw = os.environ.get("OPENROUTER_API_KEYS", "")
     keys = [key.strip() for key in raw.split(",") if key.strip()]
-    return keys or [os.environ.get("GROQ_API_KEY")]
+    return keys or [os.environ.get("OPENROUTER_API_KEY")]
+
+
+def create_client(api_key: str | None, *, http_client: httpx2.Client | None = None) -> OpenAI:
+    """Build an OpenRouter client with the previous timeout and retry defaults."""
+    if not api_key:
+        # Do not let the SDK silently fall back to an unrelated OPENAI_API_KEY.
+        raise OpenAIError("Set OPENROUTER_API_KEY or OPENROUTER_API_KEYS.")
+    return OpenAI(
+        api_key=api_key,
+        base_url=OPENROUTER_BASE_URL,
+        timeout=DEFAULT_TIMEOUT,
+        max_retries=DEFAULT_MAX_RETRIES,
+        http_client=http_client,
+    )
 
 
 API_KEYS = load_api_keys()
-clients = [Groq(api_key=key) for key in API_KEYS]
-MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+clients = [create_client(key) for key in API_KEYS]
+MODEL = os.environ.get("OPENROUTER_MODEL", "dots-studio/dots-3-note-preview:free")
+
+
+def is_configuration_error(exc: APIStatusError) -> bool:
+    """Distinguish permanent configuration/credit errors from transient failures."""
+    if isinstance(
+        exc, (AuthenticationError, PermissionDeniedError, BadRequestError, NotFoundError)
+    ):
+        return True
+    if exc.status_code != 402:
+        return False
+    body = exc.body if isinstance(exc.body, dict) else {}
+    metadata = body.get("metadata") or {}
+    # A temporary reservation of credits is retryable; adding credits is not needed.
+    return not (
+        isinstance(metadata, dict)
+        and metadata.get("limit_source") == "openrouter_in_flight_budget"
+    ) and "retry-after" not in exc.response.headers
+
+
+def _create_completion(client: OpenAI, request_kwargs: dict):
+    """Normalize errors embedded in HTTP 200 completions into SDK exceptions."""
+    response = client.chat.completions.create(**request_kwargs)
+    error = getattr(response, "error", None)
+    if error is None and response.choices:
+        choice = response.choices[0]
+        error = getattr(choice, "error", None)
+        if error is None and choice.finish_reason == "error":
+            error = {"code": 502, "message": "OpenRouter returned an incomplete completion."}
+    if error is None:
+        return response
+
+    error = error if isinstance(error, dict) else {"message": str(error)}
+    try:
+        status_code = int(error.get("code", 502))
+    except (TypeError, ValueError):
+        status_code = 502
+    if not 400 <= status_code <= 599:
+        status_code = 502
+    error_cls = {
+        400: BadRequestError,
+        401: AuthenticationError,
+        403: PermissionDeniedError,
+        404: NotFoundError,
+        429: RateLimitError,
+    }.get(status_code, InternalServerError if status_code >= 500 else APIStatusError)
+    error_response = httpx2.Response(
+        status_code,
+        request=httpx2.Request("POST", f"{OPENROUTER_BASE_URL}/chat/completions"),
+        json={"error": error},
+    )
+    raise error_cls(
+        error.get("message") or "OpenRouter returned a completion error.",
+        response=error_response,
+        body=error,
+    )
 
 
 def rate_limit_wait_seconds(exc: RateLimitError) -> float:
     """Return how long to wait before retrying a rate-limited call.
 
     Reads the standard ``retry-after`` response header first, falling back to
-    parsing Groq's "please try again in Xs" message text, and finally a fixed
+    parsing an upstream "please try again in Xs" message text, and finally a fixed
     default. Capped at RATE_LIMIT_MAX_WAIT_SECONDS so a single call can't hold
     up the caller's request indefinitely.
     """
@@ -80,7 +156,7 @@ def create_completion(request_kwargs: dict):
     last_exc: Exception | None = None
     for index, client in enumerate(clients):
         try:
-            return client.chat.completions.create(**request_kwargs)
+            return _create_completion(client, request_kwargs)
         except RateLimitError as exc:
             wait_seconds = rate_limit_wait_seconds(exc)
             logger.warning(
@@ -91,7 +167,7 @@ def create_completion(request_kwargs: dict):
             )
             time.sleep(wait_seconds)
             try:
-                return client.chat.completions.create(**request_kwargs)
+                return _create_completion(client, request_kwargs)
             except (RateLimitError, AuthenticationError, PermissionDeniedError) as retry_exc:
                 last_exc = retry_exc
                 if index < len(clients) - 1:
@@ -110,7 +186,7 @@ def create_completion(request_kwargs: dict):
                 len(clients),
             )
             try:
-                return client.chat.completions.create(**request_kwargs)
+                return _create_completion(client, request_kwargs)
             except (
                 RateLimitError,
                 AuthenticationError,
@@ -150,8 +226,8 @@ def run_prompt(
     Logs a PromptCallMetadata row per call, with a status distinguishing
     missing prompt, invalid JSON, rate limit, config error (auth/permission/
     bad request/not found), and other API errors; re-raises in every case so
-    the caller can degrade. When timeout is None the Groq client default is
-    used.
+    the caller can degrade. When timeout is None the preserved 60-second
+    client timeout (5 seconds for connection establishment) is used.
     """
     prompt_row = None
     formatted_prompt = ""
@@ -168,6 +244,7 @@ def run_prompt(
             "messages": [{"role": "user", "content": formatted_prompt}],
             "temperature": temperature,
             "response_format": {"type": "json_object"},
+            "extra_body": {"provider": {"require_parameters": True}},
         }
         if timeout is not None:
             request_kwargs["timeout"] = timeout
@@ -191,9 +268,13 @@ def run_prompt(
         error_message = str(exc)
         status = PromptCallMetadata.Status.RATE_LIMITED
         raise
-    except (AuthenticationError, PermissionDeniedError, BadRequestError, NotFoundError) as exc:
+    except APIStatusError as exc:
         error_message = str(exc)
-        status = PromptCallMetadata.Status.CONFIG_ERROR
+        status = (
+            PromptCallMetadata.Status.CONFIG_ERROR
+            if is_configuration_error(exc)
+            else PromptCallMetadata.Status.API_ERROR
+        )
         raise
     except Exception as exc:
         error_message = str(exc)
@@ -222,9 +303,10 @@ def run_prompt_safe(
     """Run run_prompt, degrading any failure to an {"error", "retryable"} dict.
 
     ``missing_prompt_message`` is returned when the prompt is not configured.
-    Auth/permission/bad-request/not-found errors are non-retryable config
-    issues; rate limits and any other call error are retryable. This is the
-    service-boundary entry point: callers never see the LLM exception, so a
+    Auth/permission/bad-request/not-found and insufficient-credit errors are
+    non-retryable config issues; transient budget, rate limit and other call
+    errors are retryable. This is the service-boundary entry point:
+    callers never see the LLM exception, so a
     failed call cannot break the surrounding request.
     """
     try:
@@ -238,10 +320,15 @@ def run_prompt_safe(
             "error": "Você atingiu o limite de uso. Tente novamente mais tarde.",
             "retryable": True,
         }
-    except (AuthenticationError, PermissionDeniedError, BadRequestError, NotFoundError):
+    except APIStatusError as exc:
+        config_error = is_configuration_error(exc)
         return {
-            "error": "Falha de configuração ao chamar o LLM.",
-            "retryable": False,
+            "error": (
+                "Falha de configuração ao chamar o LLM."
+                if config_error
+                else "Falha ao chamar o LLM."
+            ),
+            "retryable": not config_error,
         }
     except Exception:  # pylint: disable=broad-exception-caught
         return {"error": "Falha ao chamar o LLM.", "retryable": True}
