@@ -6,6 +6,11 @@
 # pylint: disable=redefined-outer-name
 
 import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+from textwrap import dedent
 from unittest.mock import MagicMock
 
 import httpx2
@@ -208,6 +213,25 @@ class TestRunPromptSafe:
         )
 
         assert result == {"error": "Prompt não configurado.", "retryable": False}
+
+    @pytest.mark.django_db
+    def test_missing_key_is_a_controlled_configuration_error(self, active_prompt, monkeypatch):
+        """Missing credentials fail only the AI call, with one configuration audit row."""
+        monkeypatch.setattr(llm, "clients", [])
+        monkeypatch.setattr(llm, "API_KEYS", [None])
+
+        result = llm.run_prompt_safe(
+            active_prompt.prompt_description, {"name": "x"}, missing_prompt_message="missing"
+        )
+
+        assert result == {
+            "error": "Falha de configuração ao chamar o LLM.",
+            "retryable": False,
+        }
+        call = PromptCallMetadata.objects.get()
+        assert call.status == PromptCallMetadata.Status.CONFIG_ERROR
+        assert "OPENROUTER_API_KEY" in call.error_message
+        assert not llm.clients
 
     @pytest.mark.django_db
     def test_invalid_json_is_retryable(self, active_prompt, monkeypatch):
@@ -473,6 +497,93 @@ class TestLoadApiKeys:
         assert llm.load_api_keys() == [None]
         with pytest.raises(OpenAIError, match="OPENROUTER_API_KEY"):
             llm.create_client(None)
+
+
+def test_clients_are_initialized_once_on_first_ai_call(monkeypatch):
+    """Deferred initialization retains the configured key order and reuses the SDK pool."""
+    first_client = make_fake_client([make_success_response(), make_success_response()])
+    second_client = make_fake_client([])
+    factory = MagicMock(side_effect=[first_client, second_client])
+    monkeypatch.setattr(llm, "clients", [])
+    monkeypatch.setattr(llm, "API_KEYS", ["key1", "key2"])
+    monkeypatch.setattr(llm, "create_client", factory)
+
+    factory.assert_not_called()
+    llm.create_completion({"model": "test-model"})
+    llm.create_completion({"model": "test-model"})
+
+    assert [call.args[0] for call in factory.call_args_list] == ["key1", "key2"]
+    assert llm.clients == [first_client, second_client]
+    assert first_client.chat.completions.create.call_count == 2
+    second_client.chat.completions.create.assert_not_called()
+
+
+def test_registration_and_login_work_without_openrouter_credentials():
+    """Reproduce a fresh deployment without a key, using only an in-memory test database."""
+    environment = os.environ.copy()
+    for key in ("OPENROUTER_API_KEY", "OPENROUTER_API_KEYS", "OPENAI_API_KEY"):
+        environment.pop(key, None)
+    environment.update(
+        DJANGO_SETTINGS_MODULE="config.settings",
+        DJANGO_SECRET_KEY="isolated-missing-key-regression-secret-long-enough",
+        DJANGO_ALLOWED_HOSTS="testserver",
+        DATABASE_ENGINE="sqlite",
+        PYTHONDONTWRITEBYTECODE="1",
+    )
+    script = dedent(
+        """
+        import json
+        from unittest.mock import patch
+
+        with patch("dotenv.load_dotenv", return_value=False):
+            import django
+            django.setup()
+
+        from django.conf import settings
+        from django.core.management import call_command
+        from django.test import Client
+
+        settings.DATABASES["default"]["NAME"] = ":memory:"
+        call_command("migrate", run_syncdb=True, verbosity=0)
+        client = Client()
+        credentials = {
+            "email": "isolated@example.invalid",
+            "full_name": "Isolated User",
+            "password": "Test#Passw0rd!",
+        }
+        health = client.get("/health/")
+        signup = client.post(
+            "/api/users/create/", json.dumps(credentials), content_type="application/json"
+        )
+        login = client.post(
+            "/api/login/", json.dumps(credentials), content_type="application/json"
+        )
+        from ai_core import llm
+        print(json.dumps({
+            "health": health.status_code,
+            "signup": signup.status_code,
+            "login": login.status_code,
+            "clients_initialized": bool(llm.clients),
+        }))
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=Path(__file__).resolve().parents[1],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "health": 200,
+        "signup": 201,
+        "login": 200,
+        "clients_initialized": False,
+    }
 
 
 @pytest.mark.django_db

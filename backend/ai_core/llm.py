@@ -3,9 +3,10 @@
 Fetches the active Prompt, calls the model, and records a PromptCallMetadata
 row. Callers supply the prompt key and the Template substitution values, so each
 service keeps its own prompt logic while the call and logging live here, next to
-the Prompt and PromptCallMetadata models. Requires OPENROUTER_API_KEY, or OPENROUTER_API_KEYS
-(comma-separated) to fall back across multiple keys when one is rate-limited or
-rejected.
+the Prompt and PromptCallMetadata models. AI calls require OPENROUTER_API_KEY,
+or OPENROUTER_API_KEYS (comma-separated) to fall back across multiple keys when
+one is rate-limited or rejected. Clients are initialized on the first AI call,
+so missing credentials do not prevent unrelated routes from loading.
 """
 
 import json
@@ -41,6 +42,10 @@ RETRY_AFTER_MESSAGE_PATTERN = re.compile(r"try again in ([\d.]+)s")
 JSON_VALIDATION_ERROR_PATTERN = re.compile(r"failed to validate json", re.IGNORECASE)
 
 
+class LLMConfigurationError(OpenAIError):
+    """Local AI configuration is missing and requires an operator to fix it."""
+
+
 def load_api_keys() -> list[str | None]:
     """Return the configured OpenRouter API keys, in fallback order.
 
@@ -56,7 +61,7 @@ def create_client(api_key: str | None, *, http_client: httpx2.Client | None = No
     """Build an OpenRouter client with the previous timeout and retry defaults."""
     if not api_key:
         # Do not let the SDK silently fall back to an unrelated OPENAI_API_KEY.
-        raise OpenAIError("Set OPENROUTER_API_KEY or OPENROUTER_API_KEYS.")
+        raise LLMConfigurationError("Set OPENROUTER_API_KEY or OPENROUTER_API_KEYS.")
     return OpenAI(
         api_key=api_key,
         base_url=OPENROUTER_BASE_URL,
@@ -67,14 +72,21 @@ def create_client(api_key: str | None, *, http_client: httpx2.Client | None = No
 
 
 API_KEYS = load_api_keys()
-clients = [create_client(key) for key in API_KEYS]
+clients: list[OpenAI] = []
 MODEL = os.environ.get("OPENROUTER_MODEL", "dots-studio/dots-3-note-preview:free")
 
 
-def is_configuration_error(exc: APIStatusError) -> bool:
+def is_configuration_error(exc: APIStatusError | LLMConfigurationError) -> bool:
     """Distinguish permanent configuration/credit errors from transient failures."""
     if isinstance(
-        exc, (AuthenticationError, PermissionDeniedError, BadRequestError, NotFoundError)
+        exc,
+        (
+            LLMConfigurationError,
+            AuthenticationError,
+            PermissionDeniedError,
+            BadRequestError,
+            NotFoundError,
+        ),
     ):
         return True
     if exc.status_code != 402:
@@ -153,6 +165,9 @@ def create_completion(request_kwargs: dict):
     real config problem) before falling back to the next key on a repeated
     failure or an auth/permission error from the current one.
     """
+    if not clients:
+        # Build the whole pool before caching it; never retain a partially built pool.
+        clients.extend([create_client(key) for key in API_KEYS])
     last_exc: Exception | None = None
     for index, client in enumerate(clients):
         try:
@@ -268,7 +283,7 @@ def run_prompt(
         error_message = str(exc)
         status = PromptCallMetadata.Status.RATE_LIMITED
         raise
-    except APIStatusError as exc:
+    except (APIStatusError, LLMConfigurationError) as exc:
         error_message = str(exc)
         status = (
             PromptCallMetadata.Status.CONFIG_ERROR
@@ -320,7 +335,7 @@ def run_prompt_safe(
             "error": "Você atingiu o limite de uso. Tente novamente mais tarde.",
             "retryable": True,
         }
-    except APIStatusError as exc:
+    except (APIStatusError, LLMConfigurationError) as exc:
         config_error = is_configuration_error(exc)
         return {
             "error": (
