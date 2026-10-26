@@ -610,7 +610,11 @@ class TestOpenRouterTransport:
             "messages": [{"role": "user", "content": "hello x"}],
             "temperature": 0.2,
             "response_format": {"type": "json_object"},
-            "provider": {"require_parameters": True},
+            "provider": {
+                "require_parameters": True,
+                "order": ["DeepInfra"],
+                "allow_fallbacks": False,
+            },
         }
         assert request.extensions["timeout"] == {
             "connect": timeout if timeout is not None else 5.0,

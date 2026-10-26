@@ -73,7 +73,7 @@ def create_client(api_key: str | None, *, http_client: httpx2.Client | None = No
 
 API_KEYS = load_api_keys()
 clients: list[OpenAI] = []
-MODEL = os.environ.get("OPENROUTER_MODEL", "dots-studio/dots-3-note-preview:free")
+MODEL = os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct")
 
 
 def is_configuration_error(exc: APIStatusError | LLMConfigurationError) -> bool:
@@ -259,7 +259,13 @@ def run_prompt(
             "messages": [{"role": "user", "content": formatted_prompt}],
             "temperature": temperature,
             "response_format": {"type": "json_object"},
-            "extra_body": {"provider": {"require_parameters": True}},
+            "extra_body": {
+                "provider": {
+                    "require_parameters": True,
+                    "order": ["DeepInfra"],
+                    "allow_fallbacks": False,
+                }
+            },
         }
         if timeout is not None:
             request_kwargs["timeout"] = timeout
