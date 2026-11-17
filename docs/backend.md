@@ -16,7 +16,6 @@ O backend do KANdo é uma API Django REST responsável por autenticação, persi
 - `django-cors-headers` (4.9.0)
 - `pdfplumber` e `pypdfium2` para extração e processamento de PDFs
 - OpenRouter para chamadas ao modelo de IA (SDK compatível `openai`, 3.16.2)
-- Modelo padrão: `dots-studio/dots-3-note-preview:free`
 - SQLite para desenvolvimento local
 - PostgreSQL/Supabase opcional para banco remoto (via `psycopg`)
 
@@ -79,7 +78,8 @@ do arquivo `.env`:
 ```env
 OPENROUTER_API_KEY=...
 # OPENROUTER_API_KEYS=chave_1,chave_2
-OPENROUTER_MODEL=dots-studio/dots-3-note-preview:free
+OPENROUTER_MODEL=id_do_modelo
+# OPENROUTER_PROVIDER=DeepInfra
 
 DJANGO_SECRET_KEY=...
 DJANGO_DEBUG=True
@@ -108,7 +108,10 @@ quando uma chave atinge o limite de uso ou é rejeitada. A migração substitui
 a Groq diretamente: as variáveis antigas `GROQ_*` não são mais lidas.
 Os valores sensíveis foram omitidos do exemplo e não devem ser versionados.
 
-Configure as novas variáveis também no Render antes de publicar esta versão.
+`OPENROUTER_MODEL` é obrigatória e não tem valor padrão no código.
+`OPENROUTER_PROVIDER` é opcional: quando definida, restringe o roteamento aos
+provedores listados, sem fallback. Configure as novas variáveis, incluindo
+`OPENROUTER_MODEL`, também no Render antes de publicar esta versão.
 Os critérios de validação e rollback estão em [Operação da camada de IA](ai.md#operação-da-camada-de-ia).
 
 `DEBUG`, `ALLOWED_HOSTS` e as variáveis de CORS são sempre lidas do ambiente

@@ -5,8 +5,12 @@ row. Callers supply the prompt key and the Template substitution values, so each
 service keeps its own prompt logic while the call and logging live here, next to
 the Prompt and PromptCallMetadata models. AI calls require OPENROUTER_API_KEY,
 or OPENROUTER_API_KEYS (comma-separated) to fall back across multiple keys when
-one is rate-limited or rejected. Clients are initialized on the first AI call,
-so missing credentials do not prevent unrelated routes from loading.
+one is rate-limited or rejected, and OPENROUTER_MODEL, which has no default in
+code and is set per environment (Render in production). OPENROUTER_PROVIDER
+(comma-separated, optional) restricts routing to the listed providers without
+fallback; when unset, OpenRouter picks any provider that supports the request.
+Clients are initialized on the first AI call, so missing credentials or model
+do not prevent unrelated routes from loading.
 """
 
 import json
@@ -57,6 +61,16 @@ def load_api_keys() -> list[str | None]:
     return keys or [os.environ.get("OPENROUTER_API_KEY")]
 
 
+def load_providers() -> list[str]:
+    """Return the OpenRouter providers the model is pinned to, in preference order.
+
+    OPENROUTER_PROVIDER is a comma-separated list; an empty list means the
+    routing is not pinned.
+    """
+    raw = os.environ.get("OPENROUTER_PROVIDER", "")
+    return [provider.strip() for provider in raw.split(",") if provider.strip()]
+
+
 def create_client(api_key: str | None, *, http_client: httpx2.Client | None = None) -> OpenAI:
     """Build an OpenRouter client with the previous timeout and retry defaults."""
     if not api_key:
@@ -73,7 +87,8 @@ def create_client(api_key: str | None, *, http_client: httpx2.Client | None = No
 
 API_KEYS = load_api_keys()
 clients: list[OpenAI] = []
-MODEL = os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct")
+MODEL = os.environ.get("OPENROUTER_MODEL", "").strip()
+PROVIDERS = load_providers()
 
 
 def is_configuration_error(exc: APIStatusError | LLMConfigurationError) -> bool:
@@ -254,18 +269,17 @@ def run_prompt(
     try:
         prompt_row = Prompt.objects.get(prompt_description=prompt_key, is_active=True)
         formatted_prompt = Template(prompt_row.prompt_detail).safe_substitute(**variables)
+        if not MODEL:
+            raise LLMConfigurationError("Set OPENROUTER_MODEL.")
+        provider_preferences = {"require_parameters": True}
+        if PROVIDERS:
+            provider_preferences.update(order=PROVIDERS, allow_fallbacks=False)
         request_kwargs = {
             "model": MODEL,
             "messages": [{"role": "user", "content": formatted_prompt}],
             "temperature": temperature,
             "response_format": {"type": "json_object"},
-            "extra_body": {
-                "provider": {
-                    "require_parameters": True,
-                    "order": ["DeepInfra"],
-                    "allow_fallbacks": False,
-                }
-            },
+            "extra_body": {"provider": provider_preferences},
         }
         if timeout is not None:
             request_kwargs["timeout"] = timeout

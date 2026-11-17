@@ -136,19 +136,34 @@ meio do SDK compatível `openai` (3.16.2). A configuração aceita uma chave ún
 em `OPENROUTER_API_KEY` ou múltiplas chaves, separadas por vírgula, em
 `OPENROUTER_API_KEYS`. Quando ambas estão presentes, a lista de chaves tem
 precedência; entradas vazias são descartadas. As variáveis antigas `GROQ_*`
-não são mais lidas. Uma chave do OpenRouter é necessária para inicializar a
-camada de IA; credenciais de outra API não são usadas como fallback.
+não são mais lidas. Os clientes são inicializados na primeira chamada de IA,
+e credenciais de outra API não são usadas como fallback. Sem chave do
+OpenRouter, os fluxos de IA retornam uma falha de configuração não retentável;
+o carregamento das rotas, o cadastro e o login continuam funcionando.
 
 ```env
 OPENROUTER_API_KEY=sua_chave_aqui
 # OPENROUTER_API_KEYS=chave_1,chave_2
-OPENROUTER_MODEL=dots-studio/dots-3-note-preview:free
+OPENROUTER_MODEL=id_do_modelo
+# OPENROUTER_PROVIDER=DeepInfra
 ```
 
-`dots-studio/dots-3-note-preview:free` é o padrão caso `OPENROUTER_MODEL` não
-seja definida. Em 18/10/2026, o OpenRouter lista a retirada desse preview para
-31/12/2026; mantenha o modelo configurável e confirme sua disponibilidade antes
-do deploy ([página do modelo](https://openrouter.ai/dots-studio/dots-3-note-preview:free)).
+`OPENROUTER_MODEL` é obrigatória e não há modelo padrão no código. Em produção,
+defina-a em **Environment** no serviço do Render (e em `backend/.env` no
+ambiente local); trocar de modelo exige apenas alterar a variável e reiniciar o
+serviço, sem novo commit. Sem ela, os fluxos de IA retornam uma falha de
+configuração não retentável, assim como na ausência da chave do OpenRouter, e o
+restante da API continua funcionando. Modelos podem ser retirados pelo
+provedor (previews gratuitos, em especial): confirme a disponibilidade no
+OpenRouter antes do deploy.
+
+`OPENROUTER_PROVIDER` é opcional e recebe um ou mais provedores do OpenRouter
+separados por vírgula (por exemplo, `DeepInfra`). Quando definida, as chamadas
+são roteadas somente para esses provedores, na ordem informada e sem fallback
+para outros (`provider.order` com `allow_fallbacks=false`). Quando ausente, o
+OpenRouter escolhe qualquer provedor que suporte os parâmetros enviados. Ao
+trocar `OPENROUTER_MODEL`, confirme que o novo modelo é servido pelo provedor
+configurado; caso contrário, a chamada falha sem alternativa.
 
 Os prompts ativos, os contratos JSON, a temperatura padrão (`0.2`) e as
 mensagens de erro em português foram preservados. As chamadas continuam
@@ -216,19 +231,6 @@ dependências e variáveis `GROQ_*`. Não é necessária migração de banco, e 
 prompts existentes não devem ser reescritos como parte desta troca.
 
 ## Limitações conhecidas
-
-> **Nota — histórico da escolha de modelo:** durante a fase de testes, a equipe avaliou
-> múltiplos modelos servidos pela Groq (incluindo Llama, GPT e Qwen) ao longo de
-> aproximadamente uma semana. O Llama apresentou os resultados mais consistentes nos
-> testes locais e foi a escolha inicial para produção. Dois dias antes da entrega do
-> projeto, a Groq comunicou por e-mail a descontinuação do modelo Llama utilizado,
-> exigindo a migração para o segundo modelo com melhor desempenho nos testes
-> (`openai/gpt-oss-120b`) em um prazo de 24 horas. Essa migração emergencial explica
-> as trocas de modelo visíveis no histórico de commits (qwen → gpt → qwen → gpt) e
-> reforça a recomendação acima de sempre conferir `ai_core/llm.py` e a variável
-> `OPENROUTER_MODEL` efetivamente configurada em produção (antes da migração, `GROQ_MODEL`), em vez de assumir que o modelo
-> documentado aqui é definitivo — dado o precedente de descontinuações por parte do
-> provedor com pouco aviso prévio.
 
 - **Sem validação contra o texto de entrada:** a canonicalização de contratos JSON
   (`ai_core/json_contracts.canonicalize_json`) traduz chaves e valores de PT para EN, mas

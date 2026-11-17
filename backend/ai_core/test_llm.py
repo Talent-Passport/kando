@@ -62,6 +62,16 @@ def make_success_response(content='{"ok": true}'):
     )
 
 
+@pytest.fixture(autouse=True)
+def configured_model(monkeypatch):
+    """Set the model that Render supplies in production; the code has no default.
+
+    Also clears the provider pin so a local OPENROUTER_PROVIDER cannot leak in.
+    """
+    monkeypatch.setattr(llm, "MODEL", "test-model")
+    monkeypatch.setattr(llm, "PROVIDERS", [])
+
+
 @pytest.fixture
 def transport_client(monkeypatch):
     """Install the production SDK client with a mock HTTP transport, never the network."""
@@ -163,6 +173,23 @@ class TestRunPromptErrorClassification:
 
         call = PromptCallMetadata.objects.get()
         assert call.status == PromptCallMetadata.Status.CONFIG_ERROR
+
+    @pytest.mark.django_db
+    def test_missing_model_raises_config_error_without_calling_the_api(
+        self, active_prompt, monkeypatch
+    ):
+        """An unset OPENROUTER_MODEL raises and logs CONFIG_ERROR before any API call."""
+        client = make_fake_client([make_success_response()])
+        monkeypatch.setattr(llm, "MODEL", "")
+        monkeypatch.setattr(llm, "clients", [client])
+
+        with pytest.raises(llm.LLMConfigurationError, match="OPENROUTER_MODEL"):
+            llm.run_prompt(active_prompt.prompt_description, {"name": "x"})
+
+        client.chat.completions.create.assert_not_called()
+        call = PromptCallMetadata.objects.get()
+        assert call.status == PromptCallMetadata.Status.CONFIG_ERROR
+        assert call.model_name == ""
 
     @pytest.mark.django_db
     def test_generic_error_raises_and_logs(self, active_prompt, monkeypatch):
@@ -449,6 +476,22 @@ class TestRateLimitWaitSeconds:
         assert llm.rate_limit_wait_seconds(exc) == llm.RATE_LIMIT_MAX_WAIT_SECONDS
 
 
+class TestLoadProviders:
+    """load_providers must parse the optional OPENROUTER_PROVIDER list."""
+
+    def test_parses_comma_separated_providers(self, monkeypatch):
+        """OPENROUTER_PROVIDER is split into an ordered list, trimming blanks and empties."""
+        monkeypatch.setenv("OPENROUTER_PROVIDER", " DeepInfra ,, Together,")
+
+        assert llm.load_providers() == ["DeepInfra", "Together"]
+
+    def test_returns_empty_list_when_unset(self, monkeypatch):
+        """With OPENROUTER_PROVIDER unset, routing is not pinned."""
+        monkeypatch.delenv("OPENROUTER_PROVIDER", raising=False)
+
+        assert llm.load_providers() == []
+
+
 class TestLoadApiKeys:
     """load_api_keys must parse OPENROUTER_API_KEYS with a OPENROUTER_API_KEY fallback."""
 
@@ -591,9 +634,12 @@ class TestOpenRouterTransport:
     """Exercise request serialization, SDK retries and actual OpenRouter wire responses."""
 
     @pytest.mark.parametrize("timeout", [None, 30, 60])
-    def test_payload_timeout_and_client_defaults(self, active_prompt, transport_client, timeout):
+    def test_payload_timeout_and_client_defaults(
+        self, active_prompt, transport_client, monkeypatch, timeout
+    ):
         """The real HTTP request preserves payload, credentials, timeout and SDK retries."""
         requests, replies = transport_client
+        monkeypatch.setattr(llm, "PROVIDERS", ["DeepInfra"])
         replies.append(httpx2.Response(200, json=make_success_response().model_dump()))
 
         assert llm.run_prompt(active_prompt.prompt_description, {"name": "x"}, timeout=timeout) == {
@@ -623,6 +669,31 @@ class TestOpenRouterTransport:
             "pool": timeout if timeout is not None else 60.0,
         }
         assert llm.clients[0].max_retries == 2
+
+    def test_unset_provider_does_not_pin_routing(self, active_prompt, transport_client):
+        """Without OPENROUTER_PROVIDER, routing is not pinned: only require_parameters is sent."""
+        requests, replies = transport_client
+        replies.append(httpx2.Response(200, json=make_success_response().model_dump()))
+
+        llm.run_prompt(active_prompt.prompt_description, {"name": "x"})
+
+        assert json.loads(requests[0].content)["provider"] == {"require_parameters": True}
+
+    def test_multiple_providers_are_sent_in_order(
+        self, active_prompt, transport_client, monkeypatch
+    ):
+        """A provider list is forwarded in order, still without falling back to others."""
+        requests, replies = transport_client
+        monkeypatch.setattr(llm, "PROVIDERS", ["DeepInfra", "Together"])
+        replies.append(httpx2.Response(200, json=make_success_response().model_dump()))
+
+        llm.run_prompt(active_prompt.prompt_description, {"name": "x"})
+
+        assert json.loads(requests[0].content)["provider"] == {
+            "require_parameters": True,
+            "order": ["DeepInfra", "Together"],
+            "allow_fallbacks": False,
+        }
 
     def test_custom_temperature(self, active_prompt, transport_client):
         """Explicit run_prompt temperature overrides are still forwarded."""
